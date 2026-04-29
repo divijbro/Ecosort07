@@ -25,8 +25,7 @@ def home():
 
 
 @app.route("/classify", methods=["POST"])
-from flask import request, jsonify
-import base64, json, re
+
 def classify():
     try:
         # ✅ GET RAW IMAGE (not JSON)
