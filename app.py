@@ -77,6 +77,58 @@ Return JSON:
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+    @app.route("/relay", methods=["POST"])
+def relay():
+    try:
+        # ✅ get raw image (NOT JSON)
+        image_bytes = request.data
+
+        if not image_bytes:
+            return jsonify({"error": "No image received"}), 400
+
+        # convert to base64 for Gemini
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        prompt = """
+You are a waste classification AI.
+
+Classify into:
+- biodegradable
+- non-biodegradable
+- hazardous
+
+Rules:
+- Humans → "stop"
+- Electronics → "hazardous"
+- Unclear → "Fail"
+
+Return ONLY JSON:
+{"class":"biodegradable","confidence":0.95}
+"""
+
+        response = model.generate_content([
+            {
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": image_base64
+                }
+            },
+            {"text": prompt}
+        ])
+
+        raw = response.text.strip()
+
+        # clean output
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+
+        result = json.loads(match.group()) if match else {"class": "Fail"}
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
