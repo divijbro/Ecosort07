@@ -25,78 +25,58 @@ def home():
 
 
 @app.route("/classify", methods=["POST"])
+from flask import request, jsonify
+import base64, json, re
 def classify():
     try:
-        data = request.get_json()
+        # ✅ GET RAW IMAGE (not JSON)
+        image_bytes = request.data
 
-        if not data or "image" not in data:
-            return jsonify({"error": "No image provided"}), 400
+        if not image_bytes:
+            return jsonify({"error": "No image received"}), 400
 
-        # ✅ Safe base64 decode
-        try:
-            image_bytes = base64.b64decode(data["image"])
-        except Exception:
-            return jsonify({"error": "Invalid base64 image"}), 400
+        # convert to base64 for Gemini
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
         prompt = """
 You are a waste classification AI.
 
-Classify the image into ONE of:
+Classify into:
 - biodegradable
 - non-biodegradable
 - hazardous
 
 Rules:
 - Humans → "stop"
-- Phones/electronics → "hazardous"
-- If unclear or multiple objects → "Fail"
+- Electronics → "hazardous"
+- Unclear → "Fail"
 
-Return ONLY valid JSON:
-{
-  "class": "biodegradable",
-  "confidence": 0.95
-}
+Return JSON:
+{"class":"biodegradable","confidence":0.95}
 """
 
-        # ✅ Correct Gemini image format
         response = model.generate_content([
             {
                 "inline_data": {
                     "mime_type": "image/jpeg",
-                    "data": base64.b64encode(image_bytes).decode("utf-8")
+                    "data": image_base64
                 }
             },
             {"text": prompt}
         ])
 
-        raw_text = response.text.strip() if response.text else ""
+        raw = response.text.strip()
 
-        if not raw_text:
-            return jsonify({
-                "class": None,
-                "confidence": None,
-                "error": "No output from model"
-            })
+        # clean Gemini output
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
 
-        # ✅ Clean Gemini output (handles ```json etc.)
-        cleaned = raw_text.replace("```json", "").replace("```", "").strip()
-
-        # ✅ Extract JSON safely
-        match = re.search(r"\{[\s\S]*\}", cleaned)
-        if not match:
-            return jsonify({
-                "class": "Fail",
-                "confidence": 0,
-                "raw": cleaned
-            })
-
-        result = json.loads(match.group())
+        result = json.loads(match.group()) if match else {"class": "Fail"}
 
         return jsonify(result)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
