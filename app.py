@@ -11,7 +11,7 @@ if not API_KEY:
     raise ValueError("❌ GOOGLE_API_KEY not set")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+model = genai.GenerativeModel("gemini-3.1-flash-lite")
 
 app = Flask(__name__)
 
